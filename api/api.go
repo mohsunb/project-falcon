@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"project-falcon/channels"
 	"project-falcon/messages"
@@ -25,6 +26,7 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 		}
 		w.WriteHeader(http.StatusCreated)
 	})
+
 	mux.HandleFunc("GET /channels", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		encoder := json.NewEncoder(w)
@@ -37,6 +39,7 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 		w.WriteHeader(http.StatusOK)
 		encoder.Encode(channels)
 	})
+
 	mux.HandleFunc("POST /channels/{channelID}/messages", func(w http.ResponseWriter, r *http.Request) {
 		var request messages.MessageSendRequest
 		json.NewDecoder(r.Body).Decode(&request)
@@ -45,7 +48,8 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
-			encoder.Encode(map[string]string{"message": fmt.Sprintf("cannot to parse channelID: %v", err)})
+			encoder.Encode(map[string]string{"message": fmt.Sprintf("cannot to parse channel id: %v", err)})
+			return
 		}
 		if err := messages.SaveMessage(ctx, dbConnPool, channelID, request); err != nil {
 			w.Header().Set("Content-Type", "application/json")
@@ -55,15 +59,45 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 		}
 		w.WriteHeader(http.StatusCreated)
 	})
+
 	mux.HandleFunc("GET /channels/{channelID}/messages", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		encoder := json.NewEncoder(w)
+
 		channelID, err := uuid.Parse(r.PathValue("channelID"))
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			encoder.Encode(map[string]string{"message": fmt.Sprintf("cannot to parse channelID: %v", err)})
+			encoder.Encode(map[string]string{"message": fmt.Sprintf("cannot to parse channel id: %v", err)})
+			return
 		}
-		messages, err := messages.GetAllMessages(ctx, dbConnPool, channelID)
+
+		cursorString := r.URL.Query().Get("cursor")
+		var cursor uuid.UUID
+		if len(cursorString) == 0 {
+			cursor = uuid.Max
+		} else {
+			cursor, err = uuid.Parse(cursorString)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				encoder.Encode(map[string]string{"message": fmt.Sprintf("cannot to parse cursor: %v", err)})
+				return
+			}
+		}
+
+		pageSizeString := r.URL.Query().Get("page-size")
+		if len(pageSizeString) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			encoder.Encode(map[string]string{"message": "page size must be specified"})
+			return
+		}
+		pageSize, err := strconv.Atoi(pageSizeString)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			encoder.Encode(map[string]string{"message": "cannot parse page-size: must be an integer"})
+			return
+		}
+
+		messages, err := messages.GetMessages(ctx, dbConnPool, channelID, cursor, pageSize)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			encoder.Encode(map[string]string{"message": fmt.Sprint(err)})

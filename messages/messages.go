@@ -19,10 +19,10 @@ type MessageSendRequest struct {
 	Message string `json:"message"`
 }
 
-func GetAllMessages(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID) ([]Message, error) {
-	rows, err := pool.Query(ctx, "select id, message, creation_timestamp from messages where channel_id = $1", channelID)
+func GetMessages(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID, cursor uuid.UUID, pageSize int) ([]Message, error) {
+	rows, err := pool.Query(ctx, "select id, message, creation_timestamp from messages where channel_id = $1 and id < $2 order by id desc limit $3", channelID, cursor, pageSize)
 	if err != nil {
-		return nil, fmt.Errorf(`failed to get all messages: %v`, err)
+		return nil, fmt.Errorf("failed to get all messages: %v", err)
 	}
 
 	messages := make([]Message, 0)
