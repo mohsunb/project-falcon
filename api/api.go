@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -53,7 +54,11 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 		}
 		if err := messages.SaveMessage(ctx, dbConnPool, channelID, request); err != nil {
 			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
+			if errors.Is(err, channels.ErrChannelNotFound) {
+				w.WriteHeader(http.StatusNotFound)
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
 			encoder.Encode(map[string]string{"message": fmt.Sprint(err)})
 			return
 		}
@@ -99,7 +104,11 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 
 		messages, err := messages.GetMessages(ctx, dbConnPool, channelID, cursor, pageSize)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			if errors.Is(err, channels.ErrChannelNotFound) {
+				w.WriteHeader(http.StatusNotFound)
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
 			encoder.Encode(map[string]string{"message": fmt.Sprint(err)})
 			return
 		}

@@ -2,6 +2,7 @@ package channels
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -58,3 +59,13 @@ func GetAllChannels(ctx context.Context, conn *pgxpool.Pool) ([]Channel, error) 
 
 	return channels, nil
 }
+
+func ChannelExists(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID) (bool, error) {
+	var exists bool
+	if err := pool.QueryRow(ctx, "select exists(select 1 from channels where id = $1) as exists", channelID).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+var ErrChannelNotFound = errors.New("channel not found")

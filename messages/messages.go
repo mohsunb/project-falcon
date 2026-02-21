@@ -3,6 +3,7 @@ package messages
 import (
 	"context"
 	"fmt"
+	"project-falcon/channels"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +21,14 @@ type MessageSendRequest struct {
 }
 
 func GetMessages(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID, cursor uuid.UUID, pageSize int) ([]Message, error) {
+	channelExists, err := channels.ChannelExists(ctx, pool, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if the channel exists: %v", err)
+	}
+	if !channelExists {
+		return nil, fmt.Errorf("cannot fetch messages: %w", channels.ErrChannelNotFound)
+	}
+
 	rows, err := pool.Query(ctx, "select id, message, creation_timestamp from messages where channel_id = $1 and id < $2 order by id desc limit $3", channelID, cursor, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all messages: %v", err)
@@ -40,6 +49,14 @@ func GetMessages(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID, c
 }
 
 func SaveMessage(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID, request MessageSendRequest) error {
+	channelExists, err := channels.ChannelExists(ctx, pool, channelID)
+	if err != nil {
+		return fmt.Errorf("failed to check if the channel exists: %v", err)
+	}
+	if !channelExists {
+		return fmt.Errorf("cannot save message: %w", channels.ErrChannelNotFound)
+	}
+
 	id, err := uuid.NewV7()
 	if err != nil {
 		return fmt.Errorf("failed to generate a v7 uuid: %v", err)
