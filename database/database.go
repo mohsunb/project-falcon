@@ -12,7 +12,7 @@ func PrepareDatabase(ctx context.Context, username string, password string, host
 	RunMigrations()
 	pool, err := pgxpool.New(ctx, fmt.Sprintf("postgres://%s:%s@%s:%d/%s", username, password, host, port, database))
 	if err != nil {
-		return nil, fmt.Errorf("failed to establish db connection: %v", err)
+		return nil, fmt.Errorf("failed to establish db connection: %w", err)
 	} else {
 		log.Println("successfully acquired db connection")
 	}

@@ -24,14 +24,14 @@ func CreateChannel(ctx context.Context, conn *pgxpool.Pool, request ChannelCreat
 	query := "insert into channels (id, name, creation_timestamp) values ($1, $2, $3)"
 	id, err := uuid.NewRandom()
 	if err != nil {
-		return fmt.Errorf("failed to generate a random id for the channel: %v", err)
+		return fmt.Errorf("failed to generate a random id for the channel: %w", err)
 	}
 	if _, err := conn.Exec(ctx, query,
 		id,
 		request.Name,
 		time.Now().UTC(),
 	); err != nil {
-		return fmt.Errorf("failed to create the channel: %v", err)
+		return fmt.Errorf("failed to create the channel: %w", err)
 	}
 	return nil
 }
@@ -40,7 +40,7 @@ func GetAllChannels(ctx context.Context, conn *pgxpool.Pool) ([]Channel, error) 
 	channels := make([]Channel, 0)
 	rows, err := conn.Query(ctx, "select id, name, creation_timestamp from channels")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get all channels: %v", err)
+		return nil, fmt.Errorf("failed to get all channels: %w", err)
 	}
 
 	for rows.Next() {
@@ -54,7 +54,7 @@ func GetAllChannels(ctx context.Context, conn *pgxpool.Pool) ([]Channel, error) 
 	}
 
 	if rows.Err() != nil {
-		return channels, fmt.Errorf("failed to read all channels: %v", err)
+		return channels, fmt.Errorf("failed to read all channels: %w", err)
 	}
 
 	return channels, nil
