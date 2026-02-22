@@ -41,6 +41,32 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 		encoder.Encode(channels)
 	})
 
+	mux.HandleFunc("PATCH /channels/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := uuid.Parse(r.PathValue("id"))
+		encoder := json.NewEncoder(w)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			encoder.Encode(map[string]string{"message": fmt.Sprintf("cannot to parse id: %v", err)})
+			return
+		}
+		var request channels.ChannelRepositionRequest
+		json.NewDecoder(r.Body).Decode(&request)
+		if err = channels.RepositionChannel(ctx, dbConnPool, id, request); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			if errors.Is(err, channels.ErrChannelNotFound) {
+				w.WriteHeader(http.StatusNotFound)
+				encoder.Encode(map[string]string{"message": fmt.Sprintf("cannot reposition channel: %v", err)})
+				return
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+				encoder.Encode(map[string]string{"message": fmt.Sprintf("failed to reposition channel: %v", err)})
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	mux.HandleFunc("POST /channels/{channelID}/messages", func(w http.ResponseWriter, r *http.Request) {
 		var request messages.MessageSendRequest
 		json.NewDecoder(r.Body).Decode(&request)
