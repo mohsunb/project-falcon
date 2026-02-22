@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -36,16 +37,39 @@ func CreateChannel(ctx context.Context, conn *pgxpool.Pool, request ChannelCreat
 	if err != nil {
 		return fmt.Errorf("failed to determine next position: %w", err)
 	}
-	if _, err := conn.Exec(ctx, query,
-		id,
-		request.Name,
-		position,
-		time.Now().UTC(),
-	); err != nil {
-		return fmt.Errorf("failed to create the channel: %w", err)
+	insertFunc := func(position int) (pgconn.CommandTag, error) {
+		return conn.Exec(ctx, query,
+			id,
+			request.Name,
+			position,
+			time.Now().UTC(),
+		)
+	}
+
+	if _, err := insertFunc(position); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			for i := 0; i < 2; i++ {
+				time.Sleep(time.Second)
+				position, err := determineNextPosition(ctx, conn)
+				if err != nil {
+					return fmt.Errorf("failed to determine next position: %w", err)
+				}
+				if _, err = insertFunc(position); err == nil {
+					break
+				}
+			}
+			if err != nil {
+				return ErrTooManyRequests
+			}
+		} else {
+			return fmt.Errorf("failed to create the channel: %w", err)
+		}
 	}
 	return nil
 }
+
+var ErrTooManyRequests = errors.New("too many channel creation requests")
 
 func determineNextPosition(ctx context.Context, conn *pgxpool.Pool) (int, error) {
 	var lastPosition int

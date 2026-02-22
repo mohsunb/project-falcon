@@ -21,6 +21,12 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 		json.NewDecoder(r.Body).Decode(&request)
 		if err := channels.CreateChannel(ctx, dbConnPool, request); err != nil {
 			w.Header().Set("Content-Type", "application/json")
+			if errors.Is(err, channels.ErrTooManyRequests) {
+				w.Header().Set("Retry-After", "10")
+				w.WriteHeader(http.StatusTooManyRequests)
+				json.NewEncoder(w).Encode(map[string]string{"message": fmt.Sprintf("%v: try again later", err)})
+				return
+			}
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"message": fmt.Sprint(err)})
 			return

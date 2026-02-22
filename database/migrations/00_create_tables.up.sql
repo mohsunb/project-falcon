@@ -2,7 +2,7 @@ create table channels
 (
     id                 uuid primary key,
     name               varchar(100) not null,
-    position           int          not null,
+    position           int          not null unique,
     creation_timestamp timestamp    not null
 );
 create table messages
