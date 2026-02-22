@@ -27,18 +27,18 @@ type ChannelRepositionRequest struct {
 	Position int `json:"position"`
 }
 
-func CreateChannel(ctx context.Context, conn *pgxpool.Pool, request ChannelCreationRequest) error {
+func CreateChannel(ctx context.Context, db *pgxpool.Pool, request ChannelCreationRequest) error {
 	query := "insert into channels (id, name, position, creation_timestamp) values ($1, $2, $3, $4)"
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return fmt.Errorf("failed to generate a random id for the channel: %w", err)
 	}
-	position, err := determineNextPosition(ctx, conn)
+	position, err := determineNextPosition(ctx, db)
 	if err != nil {
 		return fmt.Errorf("failed to determine next position: %w", err)
 	}
 	insertFunc := func(position int) (pgconn.CommandTag, error) {
-		return conn.Exec(ctx, query,
+		return db.Exec(ctx, query,
 			id,
 			request.Name,
 			position,
@@ -51,7 +51,7 @@ func CreateChannel(ctx context.Context, conn *pgxpool.Pool, request ChannelCreat
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			for i := 0; i < 2; i++ {
 				time.Sleep(time.Second)
-				position, err := determineNextPosition(ctx, conn)
+				position, err := determineNextPosition(ctx, db)
 				if err != nil {
 					return fmt.Errorf("failed to determine next position: %w", err)
 				}
@@ -71,9 +71,9 @@ func CreateChannel(ctx context.Context, conn *pgxpool.Pool, request ChannelCreat
 
 var ErrTooManyRequests = errors.New("too many channel creation requests")
 
-func determineNextPosition(ctx context.Context, conn *pgxpool.Pool) (int, error) {
+func determineNextPosition(ctx context.Context, db *pgxpool.Pool) (int, error) {
 	var lastPosition int
-	if err := conn.QueryRow(ctx, "select position from channels order by position desc limit 1").Scan(&lastPosition); err != nil {
+	if err := db.QueryRow(ctx, "select position from channels order by position desc limit 1").Scan(&lastPosition); err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return -1, err
 		}
@@ -82,9 +82,9 @@ func determineNextPosition(ctx context.Context, conn *pgxpool.Pool) (int, error)
 	return lastPosition + 1, nil
 }
 
-func GetAllChannels(ctx context.Context, conn *pgxpool.Pool) ([]Channel, error) {
+func GetAllChannels(ctx context.Context, db *pgxpool.Pool) ([]Channel, error) {
 	channels := make([]Channel, 0)
-	rows, err := conn.Query(ctx, "select id, name, position, creation_timestamp from channels")
+	rows, err := db.Query(ctx, "select id, name, position, creation_timestamp from channels")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all channels: %w", err)
 	}
@@ -107,9 +107,9 @@ func GetAllChannels(ctx context.Context, conn *pgxpool.Pool) ([]Channel, error) 
 	return channels, nil
 }
 
-func ChannelExists(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID) (bool, error) {
+func ChannelExists(ctx context.Context, db *pgxpool.Pool, id uuid.UUID) (bool, error) {
 	var exists bool
-	if err := pool.QueryRow(ctx, "select exists(select 1 from channels where id = $1) as exists", channelID).Scan(&exists); err != nil {
+	if err := db.QueryRow(ctx, "select exists(select 1 from channels where id = $1) as exists", id).Scan(&exists); err != nil {
 		return false, err
 	}
 	return exists, nil
@@ -117,8 +117,8 @@ func ChannelExists(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID)
 
 var ErrChannelNotFound = errors.New("channel not found")
 
-func RepositionChannel(ctx context.Context, conn *pgxpool.Pool, id uuid.UUID, request ChannelRepositionRequest) error {
-	channelExists, err := ChannelExists(ctx, conn, id)
+func RepositionChannel(ctx context.Context, db *pgxpool.Pool, id uuid.UUID, request ChannelRepositionRequest) error {
+	channelExists, err := ChannelExists(ctx, db, id)
 	if err != nil {
 		return fmt.Errorf("failed to check if the channel exists: %w", err)
 	}
@@ -126,7 +126,7 @@ func RepositionChannel(ctx context.Context, conn *pgxpool.Pool, id uuid.UUID, re
 		return ErrChannelNotFound
 	}
 
-	if err = pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) (err error) {
+	if err = pgx.BeginFunc(ctx, db, func(tx pgx.Tx) (err error) {
 		_, err = tx.Exec(ctx, "select id from channels for update")
 		_, err = tx.Exec(ctx, "update channels set position = $1 where id = $2", request.Position, id)
 		_, err = tx.Exec(ctx, "update channels set position = position + 1 where position >= $1 and id != $2", request.Position, id)

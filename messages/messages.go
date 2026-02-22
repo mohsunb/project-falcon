@@ -20,8 +20,8 @@ type MessageSendRequest struct {
 	Message string `json:"message"`
 }
 
-func GetMessages(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID, cursor uuid.UUID, pageSize int) ([]Message, error) {
-	channelExists, err := channels.ChannelExists(ctx, pool, channelID)
+func GetMessages(ctx context.Context, db *pgxpool.Pool, channelID uuid.UUID, cursor uuid.UUID, pageSize int) ([]Message, error) {
+	channelExists, err := channels.ChannelExists(ctx, db, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if the channel exists: %w", err)
 	}
@@ -29,7 +29,7 @@ func GetMessages(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID, c
 		return nil, fmt.Errorf("cannot fetch messages: %w", channels.ErrChannelNotFound)
 	}
 
-	rows, err := pool.Query(ctx, "select id, message, creation_timestamp from messages where channel_id = $1 and id < $2 order by id desc limit $3", channelID, cursor, pageSize)
+	rows, err := db.Query(ctx, "select id, message, creation_timestamp from messages where channel_id = $1 and id < $2 order by id desc limit $3", channelID, cursor, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all messages: %w", err)
 	}
@@ -48,8 +48,8 @@ func GetMessages(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID, c
 	return messages, nil
 }
 
-func SaveMessage(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID, request MessageSendRequest) error {
-	channelExists, err := channels.ChannelExists(ctx, pool, channelID)
+func SaveMessage(ctx context.Context, db *pgxpool.Pool, channelID uuid.UUID, request MessageSendRequest) error {
+	channelExists, err := channels.ChannelExists(ctx, db, channelID)
 	if err != nil {
 		return fmt.Errorf("failed to check if the channel exists: %w", err)
 	}
@@ -62,7 +62,7 @@ func SaveMessage(ctx context.Context, pool *pgxpool.Pool, channelID uuid.UUID, r
 		return fmt.Errorf("failed to generate a v7 uuid: %w", err)
 	}
 
-	if _, err := pool.Exec(ctx, "insert into messages(id, message, creation_timestamp, channel_id) values ($1, $2, $3, $4)", id, request.Message, time.Now().UTC(), channelID); err != nil {
+	if _, err := db.Exec(ctx, "insert into messages(id, message, creation_timestamp, channel_id) values ($1, $2, $3, $4)", id, request.Message, time.Now().UTC(), channelID); err != nil {
 		return fmt.Errorf("failed to save the message: %w", err)
 	}
 
