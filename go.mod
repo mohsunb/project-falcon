@@ -1,6 +1,6 @@
 module project-falcon
 
-go 1.26.0
+go 1.25.7
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.19.1
