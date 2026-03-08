@@ -15,7 +15,7 @@ import (
 func PrepareDatabase(ctx context.Context, username string, password string, host string, port int, database string) (*pgxpool.Pool, error) {
 	err := runMigrations(username, password, host, port, database)
 	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		log.Printf("cannot perform database migration: %v\n", err)
+		return nil, fmt.Errorf("cannot perform database migration: %w", err)
 	}
 
 	pool, err := pgxpool.New(ctx, fmt.Sprintf("postgres://%s:%s@%s:%d/%s", username, password, host, port, database))
