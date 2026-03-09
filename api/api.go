@@ -53,7 +53,7 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
-			encoder.Encode(map[string]string{"message": fmt.Sprintf("cannot to parse id: %v", err)})
+			encoder.Encode(map[string]string{"message": fmt.Sprintf("cannot parse id: %v", err)})
 			return
 		}
 		var request channels.ChannelRepositionRequest
@@ -81,7 +81,7 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
-			encoder.Encode(map[string]string{"message": fmt.Sprintf("cannot to parse channel id: %v", err)})
+			encoder.Encode(map[string]string{"message": fmt.Sprintf("cannot parse channel id: %v", err)})
 			return
 		}
 		if err := messages.SaveMessage(ctx, dbConnPool, channelID, request); err != nil {
