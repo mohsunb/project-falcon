@@ -127,6 +127,7 @@ func RepositionChannel(ctx context.Context, db *pgxpool.Pool, id uuid.UUID, requ
 	}
 
 	if err = pgx.BeginFunc(ctx, db, func(tx pgx.Tx) (err error) {
+		_, err = tx.Exec(ctx, "set constraints all deferred")
 		_, err = tx.Exec(ctx, "select id from channels for update")
 		_, err = tx.Exec(ctx, "update channels set position = $1 where id = $2", request.Position, id)
 		_, err = tx.Exec(ctx, "update channels set position = position + 1 where position >= $1 and id != $2", request.Position, id)
