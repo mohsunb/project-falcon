@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -118,23 +119,47 @@ func ChannelExists(ctx context.Context, db *pgxpool.Pool, id uuid.UUID) (bool, e
 var ErrChannelNotFound = errors.New("channel not found")
 
 func RepositionChannel(ctx context.Context, db *pgxpool.Pool, id uuid.UUID, request ChannelRepositionRequest) error {
-	channelExists, err := ChannelExists(ctx, db, id)
+	channel, err := getChannel(ctx, db, id)
 	if err != nil {
-		return fmt.Errorf("failed to check if the channel exists: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrChannelNotFound
+		} else {
+			return fmt.Errorf("failed to find the channel: %w", err)
+		}
 	}
-	if !channelExists {
-		return ErrChannelNotFound
+
+	if channel.Position == request.Position {
+		log.Println("channel is already in the desired position; skipping repositioning...")
+		return nil
 	}
 
 	if err = pgx.BeginFunc(ctx, db, func(tx pgx.Tx) (err error) {
 		_, err = tx.Exec(ctx, "set constraints all deferred")
 		_, err = tx.Exec(ctx, "select id from channels for update")
 		_, err = tx.Exec(ctx, "update channels set position = $1 where id = $2", request.Position, id)
-		_, err = tx.Exec(ctx, "update channels set position = position + 1 where position >= $1 and id != $2", request.Position, id)
+
+		oldPosition := channel.Position
+		newPosition := request.Position
+		if newPosition > oldPosition {
+			_, err = tx.Exec(ctx, "update channels set position = position - 1 where position <= $1 and position > $2 and id != $3", newPosition, oldPosition, id)
+		} else {
+			_, err = tx.Exec(ctx, "update channels set position = position + 1 where position >= $1 and position < $2 and id != $3", newPosition, oldPosition, id)
+		}
 		return
 	}); err != nil {
 		return fmt.Errorf("failed to reposition channel: %w", err)
 	}
 
 	return nil
+}
+
+func getChannel(ctx context.Context, db *pgxpool.Pool, id uuid.UUID) (Channel, error) {
+	var channel Channel
+	err := db.QueryRow(ctx, "select id, name, position, creation_timestamp from channels where id = $1", id).Scan(
+		&channel.ID,
+		&channel.Name,
+		&channel.Position,
+		&channel.CreationTimestamp,
+	)
+	return channel, err
 }
