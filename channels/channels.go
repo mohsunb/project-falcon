@@ -85,7 +85,7 @@ func determineNextPosition(ctx context.Context, db *pgxpool.Pool) (int, error) {
 
 func GetAllChannels(ctx context.Context, db *pgxpool.Pool) ([]Channel, error) {
 	channels := make([]Channel, 0)
-	rows, err := db.Query(ctx, "select id, name, position, creation_timestamp from channels")
+	rows, err := db.Query(ctx, "select id, name, position, creation_timestamp from channels order by position")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all channels: %w", err)
 	}
