@@ -66,5 +66,22 @@ func SaveMessage(ctx context.Context, db *pgxpool.Pool, channelID uuid.UUID, req
 		return fmt.Errorf("failed to save the message: %w", err)
 	}
 
+	MessagingHub.Broadcast(channelID, []byte(request.Message))
+
+	return nil
+}
+
+func SaveMessageUnchecked(ctx context.Context, db *pgxpool.Pool, channelID uuid.UUID, request MessageSendRequest) error {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return fmt.Errorf("failed to generate a v7 uuid: %w", err)
+	}
+
+	if _, err := db.Exec(ctx, "insert into messages(id, message, creation_timestamp, channel_id) values ($1, $2, $3, $4)", id, request.Message, time.Now().UTC(), channelID); err != nil {
+		return fmt.Errorf("failed to save the message: %w", err)
+	}
+
+	MessagingHub.Broadcast(channelID, []byte(request.Message))
+
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"project-falcon/database"
+	"project-falcon/messages"
 	"project-falcon/server"
 )
 
@@ -32,6 +33,9 @@ func main() {
 			log.Fatalf("failed to start the server: %v\n", err)
 		}
 	}()
+
+	messagingHub := messages.MessagingHub
+	go messagingHub.Run(baseCtx)
 
 	<-signalCtx.Done()
 	log.Println("shutdown initiated")
