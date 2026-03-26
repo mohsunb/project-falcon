@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
 	"project-falcon/channels"
 	"project-falcon/messages"
 
+	"github.com/coder/websocket"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -146,5 +148,56 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 		}
 		w.WriteHeader(http.StatusOK)
 		encoder.Encode(messages)
+	})
+
+	mux.HandleFunc("GET /channels/{channelID}/messages/live", func(w http.ResponseWriter, r *http.Request) {
+		channelID, err := uuid.Parse(r.PathValue("channelID"))
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"message": fmt.Sprintf("cannot open socket: cannot parse channel id: %v", err)})
+			return
+		}
+
+		channelExists, err := channels.ChannelExists(ctx, dbConnPool, channelID)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"message": fmt.Sprintf("cannot open socket: failed to determine if the channel exists: %v", err)})
+			return
+		}
+
+		if !channelExists {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"message": fmt.Sprintf("cannot open socket: %v", channels.ErrChannelNotFound)})
+			return
+		}
+
+		socket, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			log.Printf("failed to upgrade the connection to websocket: %v\n", err)
+			return
+		}
+		messages.MessagingHub.Register(channelID, socket)
+		log.Println("established websocket connection")
+		defer func() {
+			messages.MessagingHub.Unregister(channelID, socket)
+			socket.CloseNow()
+			log.Println("closed websocket connection")
+		}()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			_, msg, err := socket.Read(ctx)
+			if err != nil {
+				return
+			}
+			messages.SaveMessageUnchecked(ctx, dbConnPool, channelID, messages.MessageSendRequest{Message: string(msg)})
+		}
 	})
 }
