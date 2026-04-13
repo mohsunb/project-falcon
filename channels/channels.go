@@ -52,7 +52,7 @@ func CreateChannel(ctx context.Context, db *pgxpool.Pool, request ChannelCreatio
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			for i := 0; i < 2; i++ {
 				time.Sleep(time.Second)
-				position, err := determineNextPosition(ctx, db)
+				position, err = determineNextPosition(ctx, db)
 				if err != nil {
 					return fmt.Errorf("failed to determine next position: %w", err)
 				}
