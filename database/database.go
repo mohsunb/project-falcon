@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func PrepareDatabase(ctx context.Context, username string, password string, host string, port int, database string) (*pgxpool.Pool, error) {
+func PrepareDatabase(ctx context.Context, logger *slog.Logger, username string, password string, host string, port int, database string) (*pgxpool.Pool, error) {
 	err := runMigrations(username, password, host, port, database)
 	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return nil, fmt.Errorf("cannot perform database migration: %w", err)
@@ -22,7 +22,7 @@ func PrepareDatabase(ctx context.Context, username string, password string, host
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish db connection: %w", err)
 	} else {
-		log.Println("successfully acquired db connection")
+		logger.InfoContext(ctx, "successfully acquired db connection")
 	}
 	return pool, nil
 }
