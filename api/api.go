@@ -180,11 +180,12 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 			return
 		}
 		messages.MessagingHub.Register(channelID, socket)
-		logger.DebugContext(r.Context(), "established websocket connection")
+		key := r.Header.Get("Sec-WebSocket-Key")
+		logger.DebugContext(r.Context(), "established websocket connection", "key", key)
 		defer func() {
 			messages.MessagingHub.Unregister(channelID, socket)
 			socket.CloseNow()
-			logger.DebugContext(r.Context(), "closed websocket connection")
+			logger.DebugContext(r.Context(), "closed websocket connection", "key", key)
 		}()
 
 		for {
