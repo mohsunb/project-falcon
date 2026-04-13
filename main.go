@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -14,6 +15,7 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	signalCtx, signalCtxStop := signal.NotifyContext(context.Background(),
 		syscall.SIGINT,
 		syscall.SIGTERM,
@@ -21,16 +23,20 @@ func main() {
 	defer signalCtxStop()
 
 	baseCtx, baseCtxStop := context.WithCancel(context.Background())
-	pool, err := database.PrepareDatabase(baseCtx, "postgres", "password", "localhost", 5432, "postgres")
+	pool, err := database.PrepareDatabase(baseCtx, logger, "postgres", "password", "localhost", 5432, "postgres")
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("failed to prepare the database", "error", err)
+		os.Exit(1)
+	} else {
+		logger.Info("database is ready")
 	}
 
-	server := server.PrepareServer(baseCtx, pool)
+	server := server.PrepareServer(baseCtx, pool, logger)
 	go func() {
 		err := server.ListenAndServe()
 		if !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("failed to start the server: %v\n", err)
+			logger.Error("failed to start the server", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -38,14 +44,14 @@ func main() {
 	go messagingHub.Run(baseCtx)
 
 	<-signalCtx.Done()
-	log.Println("shutdown initiated")
+	logger.Info("shutdown initiated")
 	err = server.Shutdown(baseCtx)
 	baseCtxStop()
 	if err != nil {
-		log.Printf("could not shutdown the server: %v\n", err)
+		logger.Error("could not shutdown the server", "error", err)
 	}
-	log.Println("closing db connection...")
+	logger.Info("closing db connection...")
 	pool.Close()
-	log.Println("successfully closed db connection")
-	log.Println("shutdown complete")
+	logger.Info("successfully closed db connection")
+	logger.Info("shutdown complete")
 }

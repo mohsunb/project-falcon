@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxpool.Pool) {
+func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxpool.Pool, logger *slog.Logger) {
 	mux.HandleFunc("POST /channels", func(w http.ResponseWriter, r *http.Request) {
 		var request channels.ChannelCreationRequest
 		json.NewDecoder(r.Body).Decode(&request)
@@ -60,7 +60,7 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 		}
 		var request channels.ChannelRepositionRequest
 		json.NewDecoder(r.Body).Decode(&request)
-		if err = channels.RepositionChannel(ctx, dbConnPool, id, request); err != nil {
+		if err = channels.RepositionChannel(ctx, dbConnPool, logger, id, request); err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			if errors.Is(err, channels.ErrChannelNotFound) {
 				w.WriteHeader(http.StatusNotFound)
@@ -176,15 +176,16 @@ func RegisterEndpoints(mux *http.ServeMux, ctx context.Context, dbConnPool *pgxp
 
 		socket, err := websocket.Accept(w, r, nil)
 		if err != nil {
-			log.Printf("failed to upgrade the connection to websocket: %v\n", err)
+			logger.ErrorContext(r.Context(), "failed to upgrade the connection to websocket", "error", err)
 			return
 		}
 		messages.MessagingHub.Register(channelID, socket)
-		log.Println("established websocket connection")
+		key := r.Header.Get("Sec-WebSocket-Key")
+		logger.DebugContext(r.Context(), "established websocket connection", "key", key)
 		defer func() {
 			messages.MessagingHub.Unregister(channelID, socket)
 			socket.CloseNow()
-			log.Println("closed websocket connection")
+			logger.DebugContext(r.Context(), "closed websocket connection", "key", key)
 		}()
 
 		for {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -118,7 +118,7 @@ func ChannelExists(ctx context.Context, db *pgxpool.Pool, id uuid.UUID) (bool, e
 
 var ErrChannelNotFound = errors.New("channel not found")
 
-func RepositionChannel(ctx context.Context, db *pgxpool.Pool, id uuid.UUID, request ChannelRepositionRequest) error {
+func RepositionChannel(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, id uuid.UUID, request ChannelRepositionRequest) error {
 	channel, err := getChannel(ctx, db, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -129,7 +129,7 @@ func RepositionChannel(ctx context.Context, db *pgxpool.Pool, id uuid.UUID, requ
 	}
 
 	if channel.Position == request.Position {
-		log.Println("channel is already in the desired position; skipping repositioning...")
+		logger.WarnContext(ctx, "channel is already in the desired position; skipping repositioning...")
 		return nil
 	}
 
