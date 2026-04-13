@@ -27,6 +27,8 @@ func main() {
 	if err != nil {
 		logger.Error("failed to prepare the database", "error", err)
 		os.Exit(1)
+	} else {
+		logger.Info("database is ready")
 	}
 
 	server := server.PrepareServer(baseCtx, pool, logger)

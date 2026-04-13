@@ -21,8 +21,6 @@ func PrepareDatabase(ctx context.Context, logger *slog.Logger, username string, 
 	pool, err := pgxpool.New(ctx, fmt.Sprintf("postgres://%s:%s@%s:%d/%s", username, password, host, port, database))
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish db connection: %w", err)
-	} else {
-		logger.InfoContext(ctx, "successfully acquired db connection")
 	}
 	return pool, nil
 }
