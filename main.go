@@ -7,15 +7,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
+	"project-falcon/config"
 	"project-falcon/database"
 	"project-falcon/messages"
 	"project-falcon/server"
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	config := config.ParseConfig()
+	logger := prepareLogger(config)
 	signalCtx, signalCtxStop := signal.NotifyContext(context.Background(),
 		syscall.SIGINT,
 		syscall.SIGTERM,
@@ -23,7 +26,7 @@ func main() {
 	defer signalCtxStop()
 
 	baseCtx, baseCtxStop := context.WithCancel(context.Background())
-	pool, err := database.PrepareDatabase(baseCtx, logger, "postgres", "password", "localhost", 5432, "postgres")
+	pool, err := database.PrepareDatabase(baseCtx, logger, config.Database.Username, config.Database.Password, config.Database.Host, config.Database.Port, config.Database.Name)
 	if err != nil {
 		logger.Error("failed to prepare the database", "error", err)
 		os.Exit(1)
@@ -54,4 +57,26 @@ func main() {
 	pool.Close()
 	logger.Info("successfully closed db connection")
 	logger.Info("shutdown complete")
+}
+
+func prepareLogger(config config.Config) *slog.Logger {
+	var logLevel slog.Level
+	switch strings.ToLower(strings.TrimSpace(config.Log.Level)) {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	default:
+		logLevel = slog.LevelInfo
+	}
+	handlerOptions := &slog.HandlerOptions{Level: logLevel}
+	var logHandler slog.Handler
+	if strings.ToLower(strings.TrimSpace(config.Log.Type)) == "json" {
+		logHandler = slog.NewJSONHandler(os.Stderr, handlerOptions)
+	} else {
+		logHandler = slog.NewTextHandler(os.Stderr, handlerOptions)
+	}
+	return slog.New(logHandler)
 }
